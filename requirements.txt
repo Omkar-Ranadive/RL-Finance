@@ -1,0 +1,5 @@
+pandas
+gym
+tensorboard
+pandas-datareader
+
