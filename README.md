@@ -1,14 +1,14 @@
-#  Game-Theoretic Reinforcement Learning 
+#  Reinforcement Learning for Complex Financial Time Series Analysis 
 
 ## Installation 
 * Download [Miniconda](https://docs.conda.io/en/latest/miniconda.html) for your OS 
 * Create a new conda environment as follows: 
 ```
-conda create -n game-rl python=3.7 pip
+conda create -n fin-rl python=3.7 pip
 ```
 * Activate the new conda environment as follows: 
 ```
-conda activate game-rl
+conda activate fin-rl
 ```
 * Install requirements using the following command: 
 ```

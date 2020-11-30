@@ -17,21 +17,41 @@ class AgentBase:
         self.writer = writer
         self.epsilon = constants.MAX_EPSILON
         self.total_resource = total_resource  # Example in this case would be initial money
-        # which the agent starts with
+        self.num_shares = 0
 
     def fit(self):
         for ep in range(self.episodes):
-            for step in range(self.max_steps):
+            # At step 0, give the opening price of the stock at time_step 0
+            state = self.env.step(-1, -1)
+            for step in range(1, self.max_steps):
                 if np.random.uniform(0, 1) < self.epsilon:
-                    action = self.env.action_space.sample()
+                    fraction = self.env.action_space_c.sample()
+                    action = self.env.action_space_d.sample()
                 else:
-                    action = self.env.action_space.sample()
+                    fraction = self.env.action_space_c.sample()
+                    action = self.env.action_space_d.sample()
 
-                spent_res = action * self.total_resource
-                self.total_resource -= spent_res
-                print("Action taken {} Resource spent: {}, Resource left {}".format(action,
-                                                                                 spent_res,
-                                                                                    self.total_resource))
-                stock_price, total_shares = self.env.step(action=spent_res)
+                if action == 0:
+                    amount = fraction * self.total_resource
+                    self.total_resource -= amount
+
+                    print("Action taken {} Fraction {} Resource spent: {}".format(action,
+                                                                                  fraction,
+                                                                                  amount))
+
+                elif action == 1:
+                    amount = fraction * self.num_shares
+                    print("Action taken {} Fraction : {}, Shares sold {}".format(action,
+                                                                                    fraction,
+                                                                                    amount))
+                else:
+                    amount = 0
+                    print("Do nothing")
+
+                stock_price, total_shares, ret_amt = self.env.step(amount=amount, action=action)
+                self.num_shares = total_shares
+                self.total_resource += ret_amt
+                print("Current resource: {}, Total shares: {}".format(self.total_resource,
+                                                                      self.num_shares))
                 print("-"*15)
 

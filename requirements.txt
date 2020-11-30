@@ -2,4 +2,5 @@ pandas
 gym
 tensorboard
 pandas-datareader
+iex_parser
 
