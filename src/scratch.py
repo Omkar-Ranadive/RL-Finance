@@ -35,8 +35,3 @@ counter = 0
 #         if cur_msg['type'] in allowed_types:
 #             print(cur_msg)
 #             counter += 1
-
-a = 0
-b = 0
-c = 0
-

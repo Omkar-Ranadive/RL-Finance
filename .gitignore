@@ -34,4 +34,6 @@ MANIFEST
 # Ignore model logs
 src/experiments/runs/
 
-# List of .py files to ignore
+# Ignore archived files 
+src/Archived/
+
