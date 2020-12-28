@@ -7,7 +7,7 @@ class AgentBase:
                  env,
                  episodes=1,
                  max_steps=100,
-                 total_resource=1000,
+                 total_money=10000,
                  writer=None,
                  ):
 
@@ -16,42 +16,69 @@ class AgentBase:
         self.max_steps = max_steps
         self.writer = writer
         self.epsilon = constants.MAX_EPSILON
-        self.total_resource = total_resource  # Example in this case would be initial money
+        self.total_money = total_money  #
         self.num_shares = 0
+        self.num_stocks = 0
 
     def fit(self):
         for ep in range(self.episodes):
-            # At step 0, give the opening price of the stock at time_step 0
-            state = self.env.step(-1, -1)
+            # At step 0, get the pre-initialized state from environment
+            state = self.env.get_state_info()
+            self.num_stocks = state[0].shape[0]
+
             for step in range(1, self.max_steps):
                 if np.random.uniform(0, 1) < self.epsilon:
-                    fraction = self.env.action_space_c.sample()
+                    # TODO Fractional shares are not included for now
+                    # fraction = self.env.action_space_c.sample()
                     action = self.env.action_space_d.sample()
+                    # Choose 5 stocks to buy at random
+                    liquid_stocks = self._get_liquid_stocks(state[0])
+                    random_indices = np.random.choice(liquid_stocks, 5,
+                                                      replace=False)
+                    stock_mat = np.zeros((self.num_stocks))
+                    stock_mat[random_indices] = 1
+
                 else:
-                    fraction = self.env.action_space_c.sample()
-                    action = self.env.action_space_d.sample()
+                    action = self.choose_action()
 
-                if action == 0:
-                    amount = fraction * self.total_resource
-                    self.total_resource -= amount
+                print("Action chosen: {}", action)
 
-                    print("Action taken {} Fraction {} Resource spent: {}".format(action,
-                                                                                  fraction,
-                                                                                  amount))
+                state, reward = self.env.step(action=0, stock_mat=stock_mat)
+                self._get_liquid_stocks(state[0])
 
-                elif action == 1:
-                    amount = fraction * self.num_shares
-                    print("Action taken {} Fraction : {}, Shares sold {}".format(action,
-                                                                                    fraction,
-                                                                                    amount))
-                else:
-                    amount = 0
-                    print("Do nothing")
+                # print("State: ")
+                # print(state[0][:10])
+                # print("-------"*15)
+                print(state[1][:10])
+                print(state[0].shape, state[1].shape)
 
-                stock_price, total_shares, ret_amt = self.env.step(amount=amount, action=action)
-                self.num_shares = total_shares
-                self.total_resource += ret_amt
-                print("Current resource: {}, Total shares: {}".format(self.total_resource,
-                                                                      self.num_shares))
-                print("-"*15)
+            # self.env.view_portfolio()
 
+    def choose_action(self):
+        """
+        This function must be implemented by subclass.
+        Returns:
+            action (int): the action to take
+        """
+        raise NotImplementedError()
+
+    def update(self):
+        """
+        This function must be implemented by subclass.
+        """
+        raise NotImplementedError()
+
+    def _get_liquid_stocks(self, ob):
+        """
+        Return indices of those stocks which can be bought.
+        Stocks where the top of the book has a -1 in ask price can't be bought
+
+        Args:
+            ob (nd.array): Order book containing top n entries
+
+        Returns (nd.array): Array containing valid stock indices
+
+        """
+        valid_indices = np.where(ob[:, 0, 1] != -1)[0]
+
+        return valid_indices

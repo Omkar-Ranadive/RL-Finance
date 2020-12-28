@@ -94,6 +94,8 @@ class ResEnv(gym.Env):
                 if price not in self.order_book[stock][self.bd]:
                     bisect.insort(self.order_book[stock][self.bi], price)
                 if avail_vol == 0:
+                    # print("Stock {} Price {} Avail Vol {} Time Step {}".format(stock, price,
+                    #                                                            avail_vol, self.cur_time_step))
                     del self.order_book[stock][self.bd][price]
                     # Pop the last entry (largest) in case of bid price
                     self.order_book[stock][self.bi].pop(-1)
@@ -171,7 +173,6 @@ class ResEnv(gym.Env):
             self.portfolio[stocks_to_sell, 0] = 0  # Assuming all shares of that stock are sold
             self.portfolio[stocks_to_sell, 1] = 0
 
-        self.cur_time_step += step_count
         self._update_order_book(time_steps=step_count)
 
         state = [self.ob_arr, self.f_arr]
@@ -181,6 +182,13 @@ class ResEnv(gym.Env):
     def get_state_info(self):
         state = [self.ob_arr, self.f_arr]
         return state
+
+    def view_portfolio(self):
+        for k, v in self.stock_to_index.items():
+            if self.portfolio[v, 0] > 0:
+                print("Index: {}, Stock name: {} Num Shares: {} Total Spent: {}".format(v, k,
+                                                                       self.portfolio[v, 0],
+                                                                       self.portfolio[v, 1]))
 
     def reset(self):
         pass

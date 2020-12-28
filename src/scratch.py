@@ -36,4 +36,7 @@ counter = 0
 #             print(cur_msg)
 #             counter += 1
 
-# Test 2
+import numpy as np
+
+a = np.random.choice(np.arange(0, 10), 5, replace=False)
+print(a)
