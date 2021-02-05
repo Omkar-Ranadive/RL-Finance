@@ -13,7 +13,7 @@ env = gym.make("res-env-v0")
 
 
 buffer = ReplayBuffer(max_items=5)
-env_params = {'env': env, 'max_steps': 8, 'epsilon': 0.1, 'buffer': buffer}
+env_params = {'env': env, 'max_steps': 15, 'epsilon': 0.1, 'buffer': buffer}
 
 agent = agent_v0.SimpleAgent(env_params)
 agent.fit()

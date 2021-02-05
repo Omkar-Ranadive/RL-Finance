@@ -50,7 +50,7 @@ class ResEnv(gym.Env):
         num_stocks = len(set(self.stocks))
         additional_features = 3  # This num determines num of features like spread, volume etc
         # Multiply by -1.0 to denote empty values. The last dimension is 2 for buyer and seller
-        self.ob_arr = -1.0*np.ones((num_stocks, self.entries, 2))
+        self.ob_arr = -1.0*np.ones((num_stocks, self.entries, 2), dtype=np.float32)
         # TODO Add differential features like change in volume etc
         """
         Features: 
@@ -59,7 +59,7 @@ class ResEnv(gym.Env):
         2: Total volume per stock for seller's side 
         
         """
-        self.f_arr = -1.0*np.ones((num_stocks, additional_features))
+        self.f_arr = -1.0*np.ones((num_stocks, additional_features), dtype=np.float32)
 
         """
         Matrix to keep track of stocks the agent has bought 

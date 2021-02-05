@@ -15,6 +15,7 @@ class AgentBase:
                  writer=None,
                  epsilon=constants.MAX_EPSILON,
                  decay_rate=0.0005,
+                 gamma=0.9,
                  ):
 
         self.env = env
@@ -28,6 +29,7 @@ class AgentBase:
         self.buffer = buffer
         self.total_reward = 0
         self.decay_rate = decay_rate
+        self.gamma = gamma
 
     def fit(self):
         for ep in range(self.episodes):
@@ -58,7 +60,8 @@ class AgentBase:
                 self.total_reward += reward
 
                 # Append data to replay buffer
-                self.buffer.append(state, action, reward, new_state)
+                self.buffer.append(state, np.array(action, dtype=np.int64), np.array(reward,
+                                    dtype=np.float32), new_state)
 
                 state = new_state
 
@@ -100,7 +103,7 @@ class AgentBase:
         Args:
             ob (nd.array): Order book containing top n entries
 
-        Returns (nd.array): Array containing valid stock indices
+        Returns (nd.array): Stock
 
         """
         valid_indices = np.where(ob[:, 0, 1] != -1)[0]

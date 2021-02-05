@@ -35,8 +35,12 @@ counter = 0
 #         if cur_msg['type'] in allowed_types:
 #             print(cur_msg)
 #             counter += 1
-
 import numpy as np
 
-a = np.random.choice(np.arange(0, 10), 5, replace=False)
-print(a)
+a = np.random.randn(2, 3)
+
+a = np.where(a > 0.8, 1, 0)
+
+a = [1, 2, 3, 4]
+b = [2, 3]
+print(set(a).intersection(b))
