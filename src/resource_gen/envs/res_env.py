@@ -148,13 +148,17 @@ class ResEnv(gym.Env):
                           Note: Agent is only allowed to buy/sell using market orders.
                           So, if buy, order is bought using lowest ask (sell) price.
                           If sell, then order is sold using highest bid (buy) price.
-            stock_mat (nd.array): Stock matrix denoting which stocks to purchase
+            stock_mat (nd.array): Stock matrix denoting which stocks to purchase/sell
         Returns:
 
         """
         step_count = 5
         reward = 0
+        # print("Reward at start: ", reward)
         if action == 0:
+            # Get the valid stock mat
+            stock_mat = self._get_liquid_stocks(stock_mat, self.ob_arr)
+
             stocks_to_purchase = np.where(stock_mat == 1)[0]
             prices = self.ob_arr[stocks_to_purchase, 0, 1]  # Get the lowest ask prices
             # Only one share per stock can be bought for now, so just +=1 for every market order
@@ -162,12 +166,18 @@ class ResEnv(gym.Env):
             self.portfolio[stocks_to_purchase, 1] += prices
 
         elif action == 1:
+            # Get the valid stock mat
+            stock_mat = self._get_liquid_stocks(stock_mat, self.ob_arr)
+
             stocks_to_sell = np.where(stock_mat == 1)[0]
             prices = self.ob_arr[stocks_to_sell, 0, 0]  # Get the highest bid price
             # print("Selling price: ", prices)
             total_shares = self.portfolio[stocks_to_sell, 0]
-            reward_mat = total_shares*prices - self.portfolio[stocks_to_sell, 1]
-            reward = np.mean(reward_mat)
+            # If total shares are 0, then the stock doesn't exist in the portfolio,
+            # Return 0 reward in this case
+            if total_shares.size != 0:
+                reward_mat = total_shares*prices - self.portfolio[stocks_to_sell, 1]
+                reward = np.mean(reward_mat)
 
             # Clear the portfolio for those stocks
             self.portfolio[stocks_to_sell, 0] = 0  # Assuming all shares of that stock are sold
@@ -175,13 +185,29 @@ class ResEnv(gym.Env):
 
         self._update_order_book(time_steps=step_count)
 
-        state = [self.ob_arr, self.f_arr]
-
+        state = [self.ob_arr, self.f_arr, self.portfolio]
+        # print("Reward at the environment side!: ", reward)
         return state, reward
 
     def get_state_info(self):
-        state = [self.ob_arr, self.f_arr]
+        state = [self.ob_arr, self.f_arr, self.portfolio]
         return state
+
+    def _get_liquid_stocks(self, stock_mat, ob):
+        """
+        Make sure the entries which are 1 in stock matrix are liquid.
+        Return a stock mat which is liquid
+        Args:
+            stock_mat (nd.array):  Stock matrix denoting which stocks to purchase
+            ob (nd.array): Order book containing top n entries
+
+        Returns (nd.array): Valid stock matrix
+
+        """
+        invalid_indices = np.where(ob[:, 0, 1] == -1)[0]
+        stock_mat[invalid_indices] = 0
+
+        return stock_mat
 
     def view_portfolio(self):
         for k, v in self.stock_to_index.items():

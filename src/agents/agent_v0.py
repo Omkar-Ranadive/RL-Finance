@@ -73,6 +73,7 @@ class SimpleAgent(AgentBase):
             self.optimizer.step()
             print("Worked!")
 
+
 class LobNet(nn.Module):
     def __init__(self):
         super(LobNet, self).__init__()
@@ -100,6 +101,7 @@ class LobNet(nn.Module):
             num_features *= dimension
 
         return num_features
+
 
 class QNet(nn.Module):
     def __init__(self):

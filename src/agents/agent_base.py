@@ -58,6 +58,7 @@ class AgentBase:
 
                 new_state, reward = self.env.step(action=action, stock_mat=stock_mat)
                 self.total_reward += reward
+                print("Total Reward: ", self.total_reward)
 
                 # Append data to replay buffer
                 self.buffer.append(state, np.array(action, dtype=np.int64), np.array(reward,

@@ -56,12 +56,12 @@ def process_hist_data(file, hist_type, allowed_types, max_count=None):
 
 
 if __name__ == '__main__':
-    # file = str(HIST_PATH / 'data_feeds_20201124_20201124_IEXTP1_DEEP1.0.pcap.gz')
-    # allowed = ['price_level_update']
+    file = str(HIST_PATH / 'data_feeds_20201124_20201124_IEXTP1_DEEP1.0.pcap.gz')
+    allowed = ['price_level_update']
+
+    process_hist_data(file=file, allowed_types=allowed, hist_type="DEEP", max_count=300000)
+
+    # # file = str(HIST_PATH / 'data_feeds_20201124_20201124_IEXTP1_TOPS1.6.pcap.gz')
+    # allowed = ['quote_update']
     #
-    # process_hist_data(file=file, allowed_types=allowed, hist_type="DEEP", max_count=30000)
-
-    file = str(HIST_PATH / 'data_feeds_20201124_20201124_IEXTP1_TOPS1.6.pcap.gz')
-    allowed = ['quote_update']
-
-    process_hist_data(file=file, allowed_types=allowed, hist_type="TOPS", max_count=30000)
+    # process_hist_data(file=file, allowed_types=allowed, hist_type="TOPS", max_count=30000)

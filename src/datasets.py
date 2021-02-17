@@ -3,6 +3,7 @@ from torch.utils.data import IterableDataset
 from torch.utils.data import Dataset
 from collections import namedtuple
 
+
 class ReplayBuffer(Dataset):
     def __init__(self, max_items):
         self.max_items = max_items
