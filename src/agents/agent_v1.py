@@ -17,18 +17,19 @@ class LobNet(nn.Module):
         super(LobNet, self).__init__()
         self.fc1 = nn.Linear(430 * 10 * 2, 2048)
         self.fc2 = nn.Linear(2048, 1024)
-        self.fc3 = nn.Linear(1024 + 1290, 430)
+        self.fc3 = nn.Linear(4464, 430)
         self.fc4 = nn.Linear(430, 3)
 
     def forward(self, state):
         # Convert order book to another representation using FCN and concatenate with f_arr
-        order_book, f_arr = state[0], state[1]
+        order_book, f_arr, portfolio = state[0], state[1], state[2]
         order_book = order_book.view(-1, self.flatten_features(order_book))
         f_arr = f_arr.view(-1, self.flatten_features(f_arr))
-
+        portfolio = portfolio.view(-1, self.flatten_features(portfolio))
         x = F.relu(self.fc1(order_book))
         x = F.relu(self.fc2(x))
         x = torch.cat((x, f_arr), dim=1)
+        x = torch.cat((x, portfolio), dim=1)
         x = self.fc3(x)
         x = F.relu(x)
         x = self.fc4(x)

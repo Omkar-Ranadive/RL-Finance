@@ -12,20 +12,28 @@ env = gym.make("res-env-v0")
 # #
 
 
-buffer = ReplayBuffer(max_items=5)
-env_params = {'env': env, 'max_steps': 15, 'epsilon': 0.1, 'buffer': buffer}
-
-agent = agent_v0.SimpleAgent(env_params)
-agent.fit()
-
-
-
-
-# ob_arr, f_arr = env.get_state_info()
-# num_stocks = ob_arr.shape[0]
-# to_buy = np.zeros((num_stocks))
-# to_buy[[5, 6, 7]] = 1
+# buffer = ReplayBuffer(max_items=5)
+# env_params = {'env': env, 'max_steps': 15, 'epsilon': 0.1, 'buffer': buffer}
 #
-# env.step(action=0, stock_mat=to_buy)
-# env.step(action=0, stock_mat=to_buy)
-# env.step(action=1, stock_mat=to_buy)
+# agent = agent_v0.SimpleAgent(env_params)
+# agent.fit()
+
+
+
+
+state = env.get_state_info()
+ob_arr, f_arr, portfolio = state
+print(ob_arr.shape, f_arr.shape, portfolio.shape)
+num_stocks = ob_arr.shape[0]
+to_buy = np.zeros((num_stocks))
+to_buy[[5, 6, 7]] = 1
+
+state, reward = env.step(action=0, stock_mat=to_buy)
+
+print(state[0].shape, state[1].shape, state[2].shape)
+state, reward = env.step(action=0, stock_mat=to_buy)
+print(state[0].shape, state[1].shape, state[2].shape)
+state, reward = env.step(action=1, stock_mat=to_buy)
+print(state[0].shape, state[1].shape, state[2].shape)
+state, reward = env.step(action=2, stock_mat=to_buy)
+print(state[0].shape, state[1].shape, state[2].shape)

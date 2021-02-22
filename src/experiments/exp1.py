@@ -10,7 +10,6 @@ from datasets import ReplayBuffer
 import pfrl
 import torch
 import torch.nn
-import numpy as np
 from agents import agent_v1
 
 env = gym.make("res-env-v0")

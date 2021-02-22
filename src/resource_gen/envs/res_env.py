@@ -21,12 +21,14 @@ class ResEnv(gym.Env):
         1 = Sell 
         2 = Do nothing 
         """
-        df = pd.read_csv(HIST_PATH / 'processed_DEEP_29_11_2020_02_05.csv')
+        df = pd.read_csv(DATA_PATH / 'processed_DEEP_29_11_2020_02_05.csv')
         # Convert timestamp to date time object
         df['timestamp'] = pd.to_datetime(df['timestamp'])
 
         # Convert everything to lists/numpy for faster processing
         self.price_arr = df['price'].to_numpy()
+        # Round off price_arr to 2 decimal places
+        self.price_arr = np.round(self.price_arr, 2)
         self.time_arr = df['timestamp'].to_numpy()
         self.cur_time_step = 0
         self.max_time_steps = self.price_arr.shape[0]
@@ -48,7 +50,7 @@ class ResEnv(gym.Env):
         # Initialize feature matrices which will be used as state representation
         self.entries = 10   # Only top n entries of the order book will be passed as state
         num_stocks = len(set(self.stocks))
-        additional_features = 3  # This num determines num of features like spread, volume etc
+        additional_features = 5  # This num determines num of features like spread, volume etc
         # Multiply by -1.0 to denote empty values. The last dimension is 2 for buyer and seller
         self.ob_arr = -1.0*np.ones((num_stocks, self.entries, 2), dtype=np.float32)
         # TODO Add differential features like change in volume etc
@@ -57,8 +59,10 @@ class ResEnv(gym.Env):
         0: Spread
         1: Total Volume per stock for buyer's side 
         2: Total volume per stock for seller's side 
-        
+        3: Mid price = (Best Bid + Best ask) / 2 
+        4: Microprice = (Bid Vol * Ask price) + (Ask Vol * Bid Price) / (Bid Vol + Ask Vol) 
         """
+
         self.f_arr = -1.0*np.ones((num_stocks, additional_features), dtype=np.float32)
 
         """
@@ -66,15 +70,20 @@ class ResEnv(gym.Env):
         Features: 
         0: Num shares 
         1: Total spent on buying that share 
+        2. Value of the shares at time step t 
         """
-        self.portfolio = np.zeros((num_stocks, 2))
+        self.portfolio = np.zeros((num_stocks, 3), dtype=np.float32)
+
+        # Agent specific variables
+        self.hold_thres = 10
+        self.hold_counter = 0
 
         # Now, the order book keys need to be mapped to indices
         for index, k in enumerate(self.order_book.keys()):
             self.stock_to_index[k] = index
 
         # Pre-fill the order-book for first n steps
-        self._update_order_book(time_steps=1000)
+        self._update_order_book(time_steps=5000)
         # print(self.order_book)
         self._update_features()
 
@@ -90,27 +99,67 @@ class ResEnv(gym.Env):
             side = self.sides[self.cur_time_step]
             avail_vol = self.num_shares[self.cur_time_step]
 
+            # if stock == 'TANH':
+            #     print("---"*10)
+            #     print("Time step: ", self.cur_time_step)
+            #     print("Price: {}  Stock {}  Side {} Vol {}".format(price, stock, side, avail_vol))
+
             if side == 'B':
-                if price not in self.order_book[stock][self.bd]:
+                if str(price) not in self.order_book[stock][self.bd]:
+                    # print("New price value: (Buyer's side)")
                     bisect.insort(self.order_book[stock][self.bi], price)
-                if avail_vol == 0:
-                    # print("Stock {} Price {} Avail Vol {} Time Step {}".format(stock, price,
-                    #                                                            avail_vol, self.cur_time_step))
-                    del self.order_book[stock][self.bd][price]
-                    # Pop the last entry (largest) in case of bid price
-                    self.order_book[stock][self.bi].pop(-1)
+                    self.order_book[stock][self.bd][str(price)] = avail_vol
+                    # print(self.order_book[stock][self.bi])
+                    # print(self.order_book[stock][self.bd])
                 else:
-                    self.order_book[stock][self.bd][price] = avail_vol
+                    # print("Else statement: Buyer's side")
+                    self.order_book[stock][self.bd][str(price)] = avail_vol
+                    # print(self.order_book[stock][self.bi])
+                    # print(self.order_book[stock][self.bd])
+
+                if avail_vol == 0:
+                    # Note: In few cases entries other than the final entry is getting popped
+                    p_index = -1
+                    # print("Buyer's side: Volume = 0")
+                    if str(self.order_book[stock][self.bi][-1]) != str(price):
+                        # print("THIS IS THE CASE!")
+                        p_index = self.order_book[stock][self.bi].index(price)
+
+                    del self.order_book[stock][self.bd][str(price)]
+                    # Pop the last entry (largest) in case of bid price
+                    self.order_book[stock][self.bi].pop(p_index)
+                    # print("After deleting")
+                    # print(self.order_book[stock][self.bi])
+                    # print(self.order_book[stock][self.bd])
 
             else:
-                if price not in self.order_book[stock][self.sd]:
+                if str(price) not in self.order_book[stock][self.sd]:
+                    # print("New price (Seller's side)")
                     bisect.insort(self.order_book[stock][self.si], price)
-                if avail_vol == 0:
-                    del self.order_book[stock][self.sd][price]
-                    # Pop the first entry (smallest) in case of ask price
-                    self.order_book[stock][self.si].pop(0)
+                    self.order_book[stock][self.sd][str(price)] = avail_vol
+                    # print(self.order_book[stock][self.si])
+                    # print(self.order_book[stock][self.sd])
                 else:
-                    self.order_book[stock][self.sd][price] = avail_vol
+                    # print("Else statement (Seller's side)")
+                    self.order_book[stock][self.sd][str(price)] = avail_vol
+                    # print(self.order_book[stock][self.si])
+                    # print(self.order_book[stock][self.sd])
+
+                if avail_vol == 0:
+                    # Note: In few cases entries other than the final entry is getting popped
+                    p_index = 0
+                    if str(self.order_book[stock][self.si][0]) != str(price):
+                        # print("THIS IS THE CASE!")
+                        p_index = self.order_book[stock][self.si].index(price)
+
+                    del self.order_book[stock][self.sd][str(price)]
+
+                    # Pop the first entry (smallest) in case of ask price (except rare cases)
+                    self.order_book[stock][self.si].pop(p_index)
+
+                    # print("After deleting")
+                    # print(self.order_book[stock][self.si])
+                    # print(self.order_book[stock][self.sd])
 
             self.cur_time_step += 1
 
@@ -124,19 +173,44 @@ class ResEnv(gym.Env):
             seller_info = self.order_book[stock][self.si]
             end_si = min(len(seller_info), self.entries)
 
-            # Update the order book array using the top n entries of the order book for that stock
-            self.ob_arr[index, :end_bi, 0] = buyer_info[:end_bi]
-            self.ob_arr[index, :end_si, 1] = seller_info[:end_si]
+            # If end_bi / end_si is 0, then make entries = -1
+            if end_bi == 0:
+                self.ob_arr[index, :, 0] = -1
+            if end_si == 0:
+                self.ob_arr[index, :, 1] = -1
+            else:
+                # Update the order book array using the top n entries of the order book for that stock
+                self.ob_arr[index, :end_bi, 0] = buyer_info[:end_bi]
+                self.ob_arr[index, :end_si, 1] = seller_info[:end_si]
+
+            # Store the total volume available per stock
+            # print(self.order_book[stock][self.bd].values(), sum(self.order_book[stock][
+            # self.bd].values()))
+            self.f_arr[index, 1] = sum(self.order_book[stock][self.bd].values())
+            self.f_arr[index, 2] = sum(self.order_book[stock][self.sd].values())
 
             # Calculate the spread (highest buy (bid) price - lowest sell (ask) price)
             highest_bid = self.ob_arr[index, 0, 0]
+
             lowest_ask = self.ob_arr[index, 0, 1]
+
             if highest_bid != -1 and lowest_ask != -1:
                 self.f_arr[index, 0] = highest_bid - lowest_ask
+                # Calculate mid price
+                self.f_arr[index, 3] = (highest_bid + lowest_ask) / 2
 
-            # Store the total volume available per stock
-            self.f_arr[index, 1] = sum(self.order_book[stock][self.bd].values())
-            self.f_arr[index, 2] = sum(self.order_book[stock][self.sd].values())
+                # Calculate micro price
+                bid_vol = self.order_book[stock][self.bd][str(highest_bid)]
+                ask_vol = self.order_book[stock][self.sd][str(lowest_ask)]
+                total_vol = bid_vol + ask_vol
+
+                self.f_arr[index, 4] = (bid_vol*lowest_ask + ask_vol*highest_bid)/total_vol
+
+            # Calculate current value of stock for the stocks in portfolio
+            # Get shares > 0
+            user_shares = np.where(self.portfolio[:, 0] > 0)
+            # Get current market price for them
+            self.portfolio[user_shares, 2] = self.ob_arr[user_shares, 0, 0]
 
     def step(self, action, stock_mat):
         """
@@ -157,17 +231,38 @@ class ResEnv(gym.Env):
         # print("Reward at start: ", reward)
         if action == 0:
             # Get the valid stock mat
-            stock_mat = self._get_liquid_stocks(stock_mat, self.ob_arr)
+            stock_mat = self._get_liquid_stocks(stock_mat, self.ob_arr, 1-action)
 
             stocks_to_purchase = np.where(stock_mat == 1)[0]
-            prices = self.ob_arr[stocks_to_purchase, 0, 1]  # Get the lowest ask prices
-            # Only one share per stock can be bought for now, so just +=1 for every market order
-            self.portfolio[stocks_to_purchase, 0] += 1
-            self.portfolio[stocks_to_purchase, 1] += prices
+            # If all stocks are invalid, then don't buy anything, return reward of 0
+            if stocks_to_purchase.size != 0:
+                prices = self.ob_arr[stocks_to_purchase, 0, 1]  # Get the lowest ask prices
+                # Only one share per stock can be bought for now, so just +=1 for every market order
+                self.portfolio[stocks_to_purchase, 0] += 1
+                self.portfolio[stocks_to_purchase, 1] += prices
+
+                # Calculate reward
+                # If the ask price has gone down in the future, then buying right now was a bad move
+                # Else it was a good move
+                mean_purchase = np.mean(prices)
+                self._update_order_book(time_steps=step_count)
+                self._update_features()
+
+                # Make sure the stock purchases are still valid after update
+                stock_mat = self._get_liquid_stocks(stock_mat, self.ob_arr, 1-action)
+                stocks_to_purchase = np.where(stock_mat == 1)[0]
+                if stocks_to_purchase.size != 0:
+                    future_mean_purchase = np.mean(self.ob_arr[stocks_to_purchase, 0, 1])
+                    # TODO If the stocks become invalid, then was purchasing them before a good idea?
+                    # TODO If yes, how to incorporate this into the reward?
+
+                    reward = future_mean_purchase - mean_purchase
+                 
+            self.hold_counter = 0
 
         elif action == 1:
             # Get the valid stock mat
-            stock_mat = self._get_liquid_stocks(stock_mat, self.ob_arr)
+            stock_mat = self._get_liquid_stocks(stock_mat, self.ob_arr, 1-action)
 
             stocks_to_sell = np.where(stock_mat == 1)[0]
             prices = self.ob_arr[stocks_to_sell, 0, 0]  # Get the highest bid price
@@ -178,33 +273,47 @@ class ResEnv(gym.Env):
             if total_shares.size != 0:
                 reward_mat = total_shares*prices - self.portfolio[stocks_to_sell, 1]
                 reward = np.mean(reward_mat)
+                # TODO Incorporate what happens if stocks were sold in the future instead
 
             # Clear the portfolio for those stocks
             self.portfolio[stocks_to_sell, 0] = 0  # Assuming all shares of that stock are sold
             self.portfolio[stocks_to_sell, 1] = 0
 
-        self._update_order_book(time_steps=step_count)
+            self._update_order_book(time_steps=step_count)
+            self._update_features()
+            self.hold_counter = 0
+
+        elif action == 2:
+            self.hold_counter += 1
+            if self.hold_counter > self.hold_thres:
+                reward = -10  # Penalize for holding stocks for too long
+                # Our assumption is that the agent is a high frequency trader
+
+            self._update_order_book(time_steps=step_count)
+            self._update_features()
 
         state = [self.ob_arr, self.f_arr, self.portfolio]
-        # print("Reward at the environment side!: ", reward)
+        # print("Reward: ", reward)
         return state, reward
 
     def get_state_info(self):
         state = [self.ob_arr, self.f_arr, self.portfolio]
         return state
 
-    def _get_liquid_stocks(self, stock_mat, ob):
+    def _get_liquid_stocks(self, stock_mat, ob, action):
         """
         Make sure the entries which are 1 in stock matrix are liquid.
         Return a stock mat which is liquid
         Args:
             stock_mat (nd.array):  Stock matrix denoting which stocks to purchase
             ob (nd.array): Order book containing top n entries
+            action (int): 0 = buy, 1 = sell, depending on this, choose the correct entry from
+            order book
 
         Returns (nd.array): Valid stock matrix
 
         """
-        invalid_indices = np.where(ob[:, 0, 1] == -1)[0]
+        invalid_indices = np.where(ob[:, 0, action] == -1)[0]
         stock_mat[invalid_indices] = 0
 
         return stock_mat
