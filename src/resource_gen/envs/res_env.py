@@ -8,48 +8,62 @@ import pandas as pd
 from heapq import heapify, heappush, heappop
 from collections import defaultdict
 import bisect
+from iex_parser import Parser, DEEP_1_0, TOPS_1_6
 
 
 class ResEnv(gym.Env):
 
-    def __init__(self):
+    def __init__(self, reader_it, allowed_types, allowed_stocks, init_steps=500):
+
         # Continuous action space between 0 and 1
         self.action_space_c = spaces.Box(low=0, high=1.0, shape=(1, ))
         self.action_space_d = spaces.Discrete(3)
+
         """
         0 = Buy 
         1 = Sell 
         2 = Do nothing 
         """
-        df = pd.read_csv(DATA_PATH / 'processed_DEEP_29_11_2020_02_05.csv')
-        # Convert timestamp to date time object
-        df['timestamp'] = pd.to_datetime(df['timestamp'])
-
-        # Convert everything to lists/numpy for faster processing
-        self.price_arr = df['price'].to_numpy()
-        # Round off price_arr to 2 decimal places
-        self.price_arr = np.round(self.price_arr, 2)
-        self.time_arr = df['timestamp'].to_numpy()
+        # df = pd.read_csv(DATA_PATH / 'processed_DEEP_29_11_2020_02_05.csv')
+        # # Convert timestamp to date time object
+        # df['timestamp'] = pd.to_datetime(df['timestamp'])
+        #
+        # # Convert everything to lists/numpy for faster processing
+        # self.price_arr = df['price'].to_numpy()
+        # # Round off price_arr to 2 decimal places
+        # self.price_arr = np.round(self.price_arr, 2)
+        # self.time_arr = df['timestamp'].to_numpy()
         self.cur_time_step = 0
-        self.max_time_steps = self.price_arr.shape[0]
-        self.stocks = df['symbol'].to_list()
-        self.sides = df['side'].to_list()
-        self.num_shares = df['size'].to_list()
+        # self.max_time_steps = self.price_arr.shape[0]
+        # self.stocks = df['symbol'].to_list()
+        # self.sides = df['side'].to_list()
+        # self.num_shares = df['size'].to_list()
+
+
+        # Initializations for the DEEP (LOB) Processing
+        self.allowed_types = allowed_types
+        self.allowed_stocks = allowed_stocks
+
+        # process_hist_data(file=file, allowed_types=allowed, hist_type="DEEP", max_count=300000)
+        # reader = Parser(file, DEEP_1_0).__enter__()
+        self.reader_it = reader_it
 
         # Initialize a order-book in the following form:
         # Stock Symbol -> [Buyer List (Bid price), Seller List (Ask price)]
         # Buyer's list is sorted highest to lowest, Seller's list is from lowest to highest
         self.order_book = {}
         self.stock_to_index = {}
+        self.unique_stock_number = 0
         self.bi, self.si, self.bd, self.sd = 0, 1, 2, 3   # For easier referencing
-        for stock in self.stocks:
-            # The last two entries are bid dict and ask dict
-            # They will be of the form price -> available_volume
-            self.order_book[stock] = [[], [], {}, {}]
+        # for stock in self.stocks:
+        #     # The last two entries are bid dict and ask dict
+        #     # They will be of the form price -> available_volume
+        #     self.order_book[stock] = [[], [], {}, {}]
 
         # Initialize feature matrices which will be used as state representation
         self.entries = 10   # Only top n entries of the order book will be passed as state
-        num_stocks = len(set(self.stocks))
+        num_stocks = len(allowed_stocks)
+
         additional_features = 5  # This num determines num of features like spread, volume etc
         # Multiply by -1.0 to denote empty values. The last dimension is 2 for buyer and seller
         self.ob_arr = -1.0*np.ones((num_stocks, self.entries, 2), dtype=np.float32)
@@ -78,14 +92,15 @@ class ResEnv(gym.Env):
         self.hold_thres = 10
         self.hold_counter = 0
 
-        # Now, the order book keys need to be mapped to indices
-        for index, k in enumerate(self.order_book.keys()):
-            self.stock_to_index[k] = index
+        # # Now, the order book keys need to be mapped to indices
+        # for index, k in enumerate(self.order_book.keys()):
+        #     self.stock_to_index[k] = index
 
         # Pre-fill the order-book for first n steps
-        self._update_order_book(time_steps=5000)
+        self._update_order_book(time_steps=init_steps)
         # print(self.order_book)
         self._update_features()
+        print("Initialization done!")
 
     def _update_order_book(self, time_steps=5):
         """
@@ -94,15 +109,18 @@ class ResEnv(gym.Env):
             time_steps (int): Number of time steps to move forward.
         """
         for i in range(time_steps):
-            price = self.price_arr[self.cur_time_step]
-            stock = self.stocks[self.cur_time_step]
-            side = self.sides[self.cur_time_step]
-            avail_vol = self.num_shares[self.cur_time_step]
+            # price = self.price_arr[self.cur_time_step]
+            # stock = self.stocks[self.cur_time_step]
+            # side = self.sides[self.cur_time_step]
+            # avail_vol = self.num_shares[self.cur_time_step]
+            message = self._deep_reader()
+            price = message['price']
+            stock = message['symbol']
+            side = message['side']
+            avail_vol = message['size']
 
-            # if stock == 'TANH':
-            #     print("---"*10)
-            #     print("Time step: ", self.cur_time_step)
-            #     print("Price: {}  Stock {}  Side {} Vol {}".format(price, stock, side, avail_vol))
+            if stock not in self.order_book:
+                self._initialize_entries(stock)
 
             if side == 'B':
                 if str(price) not in self.order_book[stock][self.bd]:
@@ -212,6 +230,11 @@ class ResEnv(gym.Env):
             # Get current market price for them
             self.portfolio[user_shares, 2] = self.ob_arr[user_shares, 0, 0]
 
+    def _initialize_entries(self, stock):
+        self.order_book[stock] = [[], [], {}, {}]
+        self.stock_to_index[stock] = self.unique_stock_number
+        self.unique_stock_number += 1
+
     def step(self, action, stock_mat):
         """
 
@@ -257,7 +280,7 @@ class ResEnv(gym.Env):
                     # TODO If yes, how to incorporate this into the reward?
 
                     reward = future_mean_purchase - mean_purchase
-                 
+
             self.hold_counter = 0
 
         elif action == 1:
@@ -298,6 +321,7 @@ class ResEnv(gym.Env):
 
     def get_state_info(self):
         state = [self.ob_arr, self.f_arr, self.portfolio]
+        print("State returned")
         return state
 
     def _get_liquid_stocks(self, stock_mat, ob, action):
@@ -325,6 +349,29 @@ class ResEnv(gym.Env):
                                                                        self.portfolio[v, 0],
                                                                        self.portfolio[v, 1]))
 
+    def _deep_reader(self):
+        """
+        Iterate through the data directly without storing it in dataframes
+        Args:
+            allowed_types:
+            allowed_stocks:
+
+        Returns:
+
+        """
+        message = next(self.reader_it)
+
+        while message['type'] not in self.allowed_types or message['symbol'].decode('utf-8') not \
+                in self.allowed_stocks:
+            message = next(self.reader_it)
+
+        # Convert symbols and sides from byte-literals to strings
+        message['symbol'] = message['symbol'].decode('utf-8')
+        message['side'] = message['side'].decode('utf-8')
+        # Round off price to 2 decimal places
+        message['price'] = np.round(float(message['price']), 2)
+        return message
+
     def reset(self):
         pass
 
@@ -333,4 +380,11 @@ class ResEnv(gym.Env):
 
 
 if __name__ == '__main__':
-    ResEnv()
+    file = str(HIST_PATH / 'data_feeds_20201124_20201124_IEXTP1_DEEP1.0.pcap.gz')
+    allowed_types = ['price_level_update']
+
+    # process_hist_data(file=file, allowed_types=allowed, hist_type="DEEP", max_count=300000)
+    reader = Parser(file, DEEP_1_0).__enter__()
+    reader_it = iter(reader)
+
+    ResEnv(reader_it=reader_it, allowed_types=allowed_types)

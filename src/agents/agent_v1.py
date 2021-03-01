@@ -10,15 +10,17 @@ from agents.agent_base import AgentBase
 import numpy as np
 from src.datasets import RLDataset
 import torch.optim as optim
+from pfrl.policies import SoftmaxCategoricalHead
 
 
 class LobNet(nn.Module):
-    def __init__(self):
+    def __init__(self, num_stocks):
         super(LobNet, self).__init__()
-        self.fc1 = nn.Linear(430 * 10 * 2, 2048)
+        self.fc1 = nn.Linear(num_stocks * 10 * 2, 2048)
         self.fc2 = nn.Linear(2048, 1024)
-        self.fc3 = nn.Linear(4464, 430)
-        self.fc4 = nn.Linear(430, 3)
+        concated_flen = 1024+num_stocks*3+num_stocks*5
+        self.fc3 = nn.Linear(concated_flen, num_stocks)
+        self.fc4 = nn.Linear(concated_flen, 3)
 
     def forward(self, state):
         # Convert order book to another representation using FCN and concatenate with f_arr
@@ -30,8 +32,7 @@ class LobNet(nn.Module):
         x = F.relu(self.fc2(x))
         x = torch.cat((x, f_arr), dim=1)
         x = torch.cat((x, portfolio), dim=1)
-        x = self.fc3(x)
-        x = F.relu(x)
+        x_stocks = F.softmax(self.fc3(x), dim=1)
         x = self.fc4(x)
         return pfrl.action_value.DiscreteActionValue(x)
 

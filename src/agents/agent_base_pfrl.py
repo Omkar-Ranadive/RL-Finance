@@ -31,21 +31,26 @@ class AgentBase:
         self.print_freq = print_freq
         self.save_freq = save_freq
         self.writer = writer
+        self.threshold = 0.7
 
     def fit(self):
         for i in range(1, self.episodes + 1):
             R = 0  # return (sum of rewards)
             steps = 0  # time step
+            print("Tryng to get state info")
             state = self.env.get_state_info()
             num_stocks = state[0].shape[0]
             checks = False
 
             while True:
-                action = self.agent.act(state)
-                random_indices = np.random.choice(np.arange(430), 5,
-                                                  replace=False)
-                stock_mat = np.zeros((num_stocks))
-                stock_mat[random_indices] = 1
+                stock_mat, action = self.agent.act(state)
+                print(stock_mat)
+                stock_mat = (stock_mat >= self.threshold)
+                print(stock_mat)
+                # random_indices = np.random.choice(np.arange(430), 5,
+                #                                   replace=False)
+                # stock_mat = np.zeros((num_stocks))
+                # stock_mat[random_indices] = 1
 
                 obs, reward = self.env.step(action, stock_mat)
                 R += reward
