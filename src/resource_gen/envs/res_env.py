@@ -15,6 +15,18 @@ class ResEnv(gym.Env):
 
     def __init__(self, reader_it, allowed_types, allowed_stocks, init_steps=500):
 
+        """
+
+        Args:
+            reader_it (iterator obj): Reader iterator to iterate directly over LOB data
+                                      from IEX platform
+            allowed_types (list): List of strs specifying which type of data to process (Refer
+            LOB manual from IEX) - This is used in function _deep_reader()
+            allowed_stocks (list):  List of stock symbols to consider Used in _deep_reader() ->
+            Allowed stocks can be generated using the function in data_utils.py
+            init_steps (int): Initialize the order book by init_steps
+        """
+
         # Continuous action space between 0 and 1
         self.action_space_c = spaces.Box(low=0, high=1.0, shape=(1, ))
         self.action_space_d = spaces.Discrete(3)
@@ -55,10 +67,9 @@ class ResEnv(gym.Env):
         self.stock_to_index = {}
         self.unique_stock_number = 0
         self.bi, self.si, self.bd, self.sd = 0, 1, 2, 3   # For easier referencing
-        # for stock in self.stocks:
-        #     # The last two entries are bid dict and ask dict
-        #     # They will be of the form price -> available_volume
-        #     self.order_book[stock] = [[], [], {}, {}]
+
+        # Buffer to store messages in lookahead -> used to avoid iterator problems
+        self.mbuffer = []
 
         # Initialize feature matrices which will be used as state representation
         self.entries = 10   # Only top n entries of the order book will be passed as state
@@ -113,7 +124,12 @@ class ResEnv(gym.Env):
             # stock = self.stocks[self.cur_time_step]
             # side = self.sides[self.cur_time_step]
             # avail_vol = self.num_shares[self.cur_time_step]
-            message = self._deep_reader()
+
+            # First, exhaust the messages gathered by performing the lookahead
+            if len(self.mbuffer) > 0:
+                message = self.mbuffer.pop(0)
+            else:
+                message = self._deep_reader()
             price = message['price']
             stock = message['symbol']
             side = message['side']
@@ -230,6 +246,85 @@ class ResEnv(gym.Env):
             # Get current market price for them
             self.portfolio[user_shares, 2] = self.ob_arr[user_shares, 0, 0]
 
+    def _lookahead_future(self, time_steps, order_book, ob_arr):
+        """
+        Lookahead into the future by time_steps number of steps
+        This function will be used to decide how good a present action is (Ex - buying a stock)
+        """
+
+        for i in range(time_steps):
+            # price = self.price_arr[self.cur_time_step]
+            # stock = self.stocks[self.cur_time_step]
+            # side = self.sides[self.cur_time_step]
+            # avail_vol = self.num_shares[self.cur_time_step]
+            message = self._deep_reader()
+            self.mbuffer.append(message)
+            price = message['price']
+            stock = message['symbol']
+            side = message['side']
+            avail_vol = message['size']
+
+            if stock not in self.order_book:
+                order_book[stock] = [[], [], {}, {}]
+                self._initialize_entries(stock)
+
+            if side == 'B':
+                if str(price) not in order_book[stock][self.bd]:
+                    bisect.insort(order_book[stock][self.bi], price)
+                    order_book[stock][self.bd][str(price)] = avail_vol
+
+                else:
+                    order_book[stock][self.bd][str(price)] = avail_vol
+
+                if avail_vol == 0:
+                    # Note: In few cases entries other than the final entry is getting popped
+                    p_index = -1
+                    if str(order_book[stock][self.bi][-1]) != str(price):
+                        p_index = order_book[stock][self.bi].index(price)
+
+                    del order_book[stock][self.bd][str(price)]
+                    # Pop the last entry (largest) in case of bid price
+                    order_book[stock][self.bi].pop(p_index)
+
+            else:
+                if str(price) not in order_book[stock][self.sd]:
+                    bisect.insort(order_book[stock][self.si], price)
+                    order_book[stock][self.sd][str(price)] = avail_vol
+
+                else:
+                    order_book[stock][self.sd][str(price)] = avail_vol
+
+                if avail_vol == 0:
+                    # Note: In few cases entries other than the final entry is getting popped
+                    p_index = 0
+                    if str(order_book[stock][self.si][0]) != str(price):
+                        p_index = order_book[stock][self.si].index(price)
+
+                    del order_book[stock][self.sd][str(price)]
+
+                    # Pop the first entry (smallest) in case of ask price (except rare cases)
+                    order_book[stock][self.si].pop(p_index)
+
+        for stock, index in self.stock_to_index.items():
+            # Remember buy prices should sorted in descending order; so reverse the list
+            buyer_info = order_book[stock][self.bi][::-1]
+            end_bi = min(len(buyer_info), self.entries)
+
+            seller_info = order_book[stock][self.si]
+            end_si = min(len(seller_info), self.entries)
+
+            # If end_bi / end_si is 0, then make entries = -1
+            if end_bi == 0:
+                ob_arr[index, :, 0] = -1
+            if end_si == 0:
+                ob_arr[index, :, 1] = -1
+            else:
+                # Update the order book array using the top n entries of the order book for that stock
+                ob_arr[index, :end_bi, 0] = buyer_info[:end_bi]
+                ob_arr[index, :end_si, 1] = seller_info[:end_si]
+
+        return ob_arr
+
     def _initialize_entries(self, stock):
         self.order_book[stock] = [[], [], {}, {}]
         self.stock_to_index[stock] = self.unique_stock_number
@@ -250,6 +345,7 @@ class ResEnv(gym.Env):
 
         """
         step_count = 5
+        lookahead_count = 50
         reward = 0
         # print("Reward at start: ", reward)
         if action == 0:
@@ -268,18 +364,22 @@ class ResEnv(gym.Env):
                 # If the ask price has gone down in the future, then buying right now was a bad move
                 # Else it was a good move
                 mean_purchase = np.mean(prices)
-                self._update_order_book(time_steps=step_count)
-                self._update_features()
+                ob_arr = self._lookahead_future(time_steps=lookahead_count,
+                                                order_book=self.order_book.copy(),
+                                                ob_arr=self.ob_arr.copy())
 
                 # Make sure the stock purchases are still valid after update
-                stock_mat = self._get_liquid_stocks(stock_mat, self.ob_arr, 1-action)
+                stock_mat = self._get_liquid_stocks(stock_mat, ob_arr, 1-action)
                 stocks_to_purchase = np.where(stock_mat == 1)[0]
                 if stocks_to_purchase.size != 0:
-                    future_mean_purchase = np.mean(self.ob_arr[stocks_to_purchase, 0, 1])
+                    future_mean_purchase = np.mean(ob_arr[stocks_to_purchase, 0, 1])
                     # TODO If the stocks become invalid, then was purchasing them before a good idea?
                     # TODO If yes, how to incorporate this into the reward?
-
                     reward = future_mean_purchase - mean_purchase
+                else:
+                    # If the stocks are unavailable, it means they were sold
+                    # Assuming this is a good thing - reward positively
+                    reward = 5
 
             self.hold_counter = 0
 
@@ -301,9 +401,6 @@ class ResEnv(gym.Env):
             # Clear the portfolio for those stocks
             self.portfolio[stocks_to_sell, 0] = 0  # Assuming all shares of that stock are sold
             self.portfolio[stocks_to_sell, 1] = 0
-
-            self._update_order_book(time_steps=step_count)
-            self._update_features()
             self.hold_counter = 0
 
         elif action == 2:
@@ -312,8 +409,9 @@ class ResEnv(gym.Env):
                 reward = -10  # Penalize for holding stocks for too long
                 # Our assumption is that the agent is a high frequency trader
 
-            self._update_order_book(time_steps=step_count)
-            self._update_features()
+        # Update the states
+        self._update_order_book(time_steps=step_count)
+        self._update_features()
 
         state = [self.ob_arr, self.f_arr, self.portfolio]
         # print("Reward: ", reward)

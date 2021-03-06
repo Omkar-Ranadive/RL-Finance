@@ -3,6 +3,8 @@ Agent base class to work with the PFRL library
 """
 
 import numpy as np
+import torch
+from constants import MODEL_PATH
 
 
 class AgentBase:
@@ -11,9 +13,11 @@ class AgentBase:
                  agent,
                  episodes,
                  max_episode_len,
+                 exp_id,
                  print_freq=500,
                  save_freq=10000,
                  writer=None,
+                 threshold=0.8
                 ):
         """
 
@@ -22,7 +26,12 @@ class AgentBase:
             agent (pfrl obj): Instantiated pfrl agent
             episodes (int): Num of episodes
             max_episode_len (int): Per episode len
+            exp_id (str): ID of experiment (used as unique id for saving agents)
+            print_freq (int): Number of steps after which to print info
+            save_freq (int): Number of steps after which to save agent's internal state
             writer (torch.utils.tensorboard.SummaryWriter): Tensorboard logging object
+            threshold (int): If stock mat prob > threshold, then action will be taken on that
+            stock
         """
         self.env = env
         self.agent = agent
@@ -31,37 +40,38 @@ class AgentBase:
         self.print_freq = print_freq
         self.save_freq = save_freq
         self.writer = writer
-        self.threshold = 0.7
+        self.exp_id = exp_id
+        self.threshold = threshold
 
     def fit(self):
         for i in range(1, self.episodes + 1):
-            R = 0  # return (sum of rewards)
+            mean_reward = 0  # return (sum of rewards)
             steps = 0  # time step
-            print("Tryng to get state info")
             state = self.env.get_state_info()
-            num_stocks = state[0].shape[0]
             checks = False
 
             while True:
-                stock_mat, action = self.agent.act(state)
-                print(stock_mat)
-                stock_mat = (stock_mat >= self.threshold)
-                print(stock_mat)
+                action = self.agent.act(state)
+                stock_mat = self.agent.model.forward_2(state)
+                # stock_mat, action = self.custom_act(state)
+                # print(stock_mat)
+                stock_mat = (stock_mat >= self.threshold).astype(int)
                 # random_indices = np.random.choice(np.arange(430), 5,
                 #                                   replace=False)
                 # stock_mat = np.zeros((num_stocks))
                 # stock_mat[random_indices] = 1
-
                 obs, reward = self.env.step(action, stock_mat)
-                R += reward
+                mean_reward += reward
                 steps += 1
+
                 reset = steps == self.max_episode_len
 
                 self.agent.observe(obs, reward, False, reset)
+
                 if reset:
                     break
                 if steps % self.print_freq == 0:
-                    print('Total Steps: {} Reward {}'.format(steps, reward))
+                    print('Total Steps: {} Reward {}'.format(steps, mean_reward))
                     stats = self.agent.get_statistics()
                     print(stats)
                     if not checks:
@@ -69,19 +79,25 @@ class AgentBase:
                         checks = True
 
                     avg_loss = stats[1][1]
-
+                    print("Stock Mat")
+                    print(stock_mat)
+                    print("*"*10)
                     if self.writer:
-                        self.writer.add_scalar('Rewards/Total Reward', R, steps)
-
+                        # Mean reward is per print_freq steps
+                        self.writer.add_scalar('Rewards/Mean Reward', mean_reward, steps)
                         self.writer.add_scalar('Loss/Avg Loss', avg_loss, steps)
+
+                    mean_reward = 0
+
+                if steps % self.save_freq == 0:
+                    print('Agent saved at step: {}'.format(steps))
+                    agent_name = "{}_{}".format(self.exp_id, steps)
+                    self.agent.save(str(MODEL_PATH / 'saved_agents' / agent_name))
 
         print('Finished.')
         if self.writer:
             self.writer.flush()
             self.writer.close()
-
-
-
 
 
 

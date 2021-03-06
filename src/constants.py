@@ -7,8 +7,7 @@ DATA_PATH = PARENT_PATH / '../data'
 META_PATH = PARENT_PATH / '../meta'
 MODEL_PATH = PARENT_PATH / 'models'
 
-# HIST files are huge so data is not kept on a relative path. Change it according to your system
-HIST_PATH = Path(r'W:/Finance_HIST/Feeds')
+HIST_PATH = DATA_PATH  # These files are huge, so change the path according
 
 # Agent constants
 MAX_EPSILON = 1.0

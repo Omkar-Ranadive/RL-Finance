@@ -1,3 +1,11 @@
+"""
+Double DQN Agent
+Strategy:
+Linear Epsilon Decay
+
+"""
+
+
 import gym
 import resource_gen
 from agents import agent_base_pfrl
@@ -34,10 +42,11 @@ writer = SummaryWriter(MODEL_PATH / 'runs/{}'.format(exp_id))
 # Model params
 q_func = agent_v1.LobNet(num_stocks=len(allowed_stocks))
 optimizer = torch.optim.Adam(q_func.parameters(), eps=1e-4)
-gamma = 0.9
+gamma = 0.99
 # Use epsilon-greedy for exploration
-explorer = pfrl.explorers.ConstantEpsilonGreedy(
-    epsilon=0.6, random_action_func=env.action_space_d.sample)
+explorer = pfrl.explorers.LinearDecayEpsilonGreedy(
+    start_epsilon=1.0, end_epsilon=0.1,
+    decay_steps=50000, random_action_func=env.action_space_d.sample)
 # DQN uses Experience Replay.
 # Specify a replay buffer and its capacity.
 replay_buffer = pfrl.replay_buffers.ReplayBuffer(capacity=10 ** 6)
@@ -53,16 +62,18 @@ agent_params = pfrl.agents.DoubleDQN(
     explorer,
     replay_start_size=500,
     update_interval=1,
-    target_update_interval=100,
+    target_update_interval=500,
     gpu=gpu,
 )
 
 agent = agent_base_pfrl.AgentBase(env=env,
                                   agent=agent_params,
                                   episodes=1,
-                                  print_freq=500,
-                                  max_episode_len=5000,
-                                  writer=None)
+                                  print_freq=1000,
+                                  save_freq=10000,
+                                  max_episode_len=-1,  # Put -1 for infinite steps
+                                  exp_id=exp_id,
+                                  writer=writer)
 
 agent.fit()
 
