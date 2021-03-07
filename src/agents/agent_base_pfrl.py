@@ -46,23 +46,31 @@ class AgentBase:
     def fit(self):
         for i in range(1, self.episodes + 1):
             mean_reward = 0  # return (sum of rewards)
+            hits = 0  # To calculate hit ratio
             steps = 0  # time step
             state = self.env.get_state_info()
             checks = False
+            returns = []   # Keep track of returns to calculate standard deviation
 
             while True:
                 action = self.agent.act(state)
-                stock_mat = self.agent.model.forward_2(state)
-                # stock_mat, action = self.custom_act(state)
-                # print(stock_mat)
-                stock_mat = (stock_mat >= self.threshold).astype(int)
-                # random_indices = np.random.choice(np.arange(430), 5,
-                #                                   replace=False)
-                # stock_mat = np.zeros((num_stocks))
-                # stock_mat[random_indices] = 1
+                stock_mat_prob = self.agent.model.forward_2(state)
+                mean_prob = np.mean(stock_mat_prob)
+                cur_threshold = min(self.threshold, mean_prob)
+                stock_mat = (stock_mat_prob >= cur_threshold).astype(int)
+
                 obs, reward = self.env.step(action, stock_mat)
                 mean_reward += reward
                 steps += 1
+
+                # Keep track of variables required to calculate Sharpe Ratio (only if action =  sell)
+                if action == 1:
+                    roi = self.env.get_sell_info()
+                    returns.append(roi)
+
+                # If reward > 0, then it is a profitable trade
+                if reward > 0:
+                    hits += 1
 
                 reset = steps == self.max_episode_len
 
@@ -71,7 +79,22 @@ class AgentBase:
                 if reset:
                     break
                 if steps % self.print_freq == 0:
-                    print('Total Steps: {} Reward {}'.format(steps, mean_reward))
+                    hit_ratio = hits/self.print_freq   # Num of trade executed = print freq
+
+                    # A ratio of -1 indicates, no selling of equities happened
+                    sharpe_ratio = -1
+                    mean_roi = -1
+                    std_roi = -1
+
+                    if len(returns) > 0:
+                        mean_roi = np.mean(returns)
+                        std_roi = np.std(returns)
+                        sharpe_ratio = (mean_roi - 0.01) / std_roi
+
+                    print('Total Steps: {} Reward {} Hit Ratio {} Sharpe Ratio {} Mean ROI {} '
+                          'STD ROI {}'.format(steps, mean_reward, hit_ratio, sharpe_ratio,
+                                              mean_roi, std_roi))
+
                     stats = self.agent.get_statistics()
                     print(stats)
                     if not checks:
@@ -79,15 +102,23 @@ class AgentBase:
                         checks = True
 
                     avg_loss = stats[1][1]
+                    print("Stock Mat Prob: ")
+                    print(stock_mat_prob)
+                    print("*"*10)
                     print("Stock Mat")
                     print(stock_mat)
                     print("*"*10)
+
                     if self.writer:
                         # Mean reward is per print_freq steps
-                        self.writer.add_scalar('Rewards/Mean Reward', mean_reward, steps)
+                        self.writer.add_scalar('Metrics/Mean Reward', mean_reward, steps)
+                        self.writer.add_scalar('Metrics/Hit Ratio', hit_ratio, steps)
+                        self.writer.add_scalar('Metrics/Sharpe Ratio', sharpe_ratio, steps)
                         self.writer.add_scalar('Loss/Avg Loss', avg_loss, steps)
 
                     mean_reward = 0
+                    hits = 0
+                    returns = []
 
                 if steps % self.save_freq == 0:
                     print('Agent saved at step: {}'.format(steps))

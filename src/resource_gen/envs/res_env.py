@@ -50,14 +50,13 @@ class ResEnv(gym.Env):
         # self.stocks = df['symbol'].to_list()
         # self.sides = df['side'].to_list()
         # self.num_shares = df['size'].to_list()
-
+        self.roi = 0  # Used for calculating Sharpe ratio
 
         # Initializations for the DEEP (LOB) Processing
         self.allowed_types = allowed_types
         self.allowed_stocks = allowed_stocks
 
-        # process_hist_data(file=file, allowed_types=allowed, hist_type="DEEP", max_count=300000)
-        # reader = Parser(file, DEEP_1_0).__enter__()
+        # For data processing
         self.reader_it = reader_it
 
         # Initialize a order-book in the following form:
@@ -392,10 +391,12 @@ class ResEnv(gym.Env):
             # print("Selling price: ", prices)
             total_shares = self.portfolio[stocks_to_sell, 0]
             # If total shares are 0, then the stock doesn't exist in the portfolio,
-            # Return 0 reward in this case
-            if total_shares.size != 0:
+            # If size == 0, then non of the stocks were liquid
+            if total_shares.size != 0 and np.sum(total_shares) > 0:
                 reward_mat = total_shares*prices - self.portfolio[stocks_to_sell, 1]
                 reward = np.mean(reward_mat)
+                # Calculate roi
+                self.roi = (reward / np.mean(self.portfolio[stocks_to_sell, 1])) * 100
                 # TODO Incorporate what happens if stocks were sold in the future instead
 
             # Clear the portfolio for those stocks
@@ -413,16 +414,37 @@ class ResEnv(gym.Env):
         self._update_order_book(time_steps=step_count)
         self._update_features()
 
-        state = [self.ob_arr, self.f_arr, self.portfolio]
+        state = self._normalize_state(self.ob_arr.copy(), self.f_arr.copy(), self.portfolio.copy())
         # print("Reward: ", reward)
         return state, reward
 
     def get_state_info(self):
-        state = [self.ob_arr, self.f_arr, self.portfolio]
-        print("State returned")
-        return state
+        return self._normalize_state(self.ob_arr.copy(), self.f_arr.copy(), self.portfolio.copy())
 
-    def _get_liquid_stocks(self, stock_mat, ob, action):
+    def get_sell_info(self):
+        return self.roi
+
+    @staticmethod
+    def _normalize_state(ob_arr, f_arr, portfolio, min_range=-1, max_range=1):
+        # Normalize between -1, 1 range
+        ob_arr_max = np.max(ob_arr)
+        ob_arr_min = np.min(ob_arr)
+        ob_arr = min_range + (ob_arr - ob_arr_min)*(max_range-min_range) / (ob_arr_max - ob_arr_min)
+
+        f_max = np.max(f_arr)
+        f_min = np.min(f_arr)
+        f_arr = min_range + (f_arr - f_min) * (max_range - min_range) / (f_max - f_min)
+
+        port_max = np.max(portfolio)
+        port_min = np.min(portfolio)
+        # Initially, portfolio is all zeros, avoid that case
+        if port_max != port_min:
+            portfolio = (portfolio - port_min) / (port_max - port_min)
+
+        return [ob_arr, f_arr, portfolio]
+
+    @staticmethod
+    def _get_liquid_stocks(stock_mat, ob, action):
         """
         Make sure the entries which are 1 in stock matrix are liquid.
         Return a stock mat which is liquid
@@ -450,12 +472,6 @@ class ResEnv(gym.Env):
     def _deep_reader(self):
         """
         Iterate through the data directly without storing it in dataframes
-        Args:
-            allowed_types:
-            allowed_stocks:
-
-        Returns:
-
         """
         message = next(self.reader_it)
 

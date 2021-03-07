@@ -32,7 +32,7 @@ class LobNet(nn.Module):
         x = F.relu(self.fc2(x))
         x = torch.cat((x, f_arr), dim=1)
         x = torch.cat((x, portfolio), dim=1)
-        x = torch.sigmoid(self.fc3(x))
+        x = F.relu(self.fc3(x))
         x = self.fc4(x)
         return pfrl.action_value.DiscreteActionValue(x)
 

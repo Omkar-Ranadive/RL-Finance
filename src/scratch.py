@@ -42,3 +42,18 @@
 # #         if cur_msg['type'] in allowed_types:
 # #             print(cur_msg)
 # #             counter += 1
+import numpy as np
+import sklearn.preprocessing as preprocessing
+
+
+a = np.array([[1, -1, 0], [-1, 2.4, 5.5]])
+print(a.shape)
+b = np.array([[1, 2, 3],
+             [4, 5 , 6],
+              [7, 8, 9]
+              ])
+
+max_val, min_val = np.max(a), np.min(a)
+
+a = [1, 2, 3, 4, 5]
+print(np.mean(a))

@@ -4,3 +4,4 @@ tensorboard
 pandas-datareader
 iex_parser
 pfrl
+scikit-learn

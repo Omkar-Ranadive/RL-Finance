@@ -37,6 +37,8 @@ reader_it = iter(reader)
 exp_id = "exp2_{}".format(datetime.now().strftime("%Y_%m_%d-%I_%M_%S_%p"))
 env = gym.make("res-env-v0", reader_it=reader_it, allowed_types=allowed_types,
                allowed_stocks=allowed_stocks)
+
+
 writer = SummaryWriter(MODEL_PATH / 'runs/{}'.format(exp_id))
 
 # Model params
@@ -71,7 +73,7 @@ agent = agent_base_pfrl.AgentBase(env=env,
                                   episodes=1,
                                   print_freq=1000,
                                   save_freq=10000,
-                                  max_episode_len=-1,  # Put -1 for infinite steps
+                                  max_episode_len=100000,  # Put -1 for infinite steps
                                   exp_id=exp_id,
                                   writer=writer)
 
