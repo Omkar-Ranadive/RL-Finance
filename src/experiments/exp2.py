@@ -20,6 +20,8 @@ from datetime import datetime
 from constants import MODEL_PATH, HIST_PATH, DATA_PATH
 from iex_parser import Parser, DEEP_1_0
 from utils import load_file
+import sys
+import os
 
 # Initializations for the DEEP (LOB) Processing
 file = str(HIST_PATH / 'data_feeds_20201124_20201124_IEXTP1_DEEP1.0.pcap.gz')
@@ -32,9 +34,9 @@ allowed_stocks = load_file(filename=allowed_stocks_file)
 reader = Parser(file, DEEP_1_0).__enter__()
 reader_it = iter(reader)
 
-
 # Env params
 exp_id = "exp2_{}".format(datetime.now().strftime("%Y_%m_%d-%I_%M_%S_%p"))
+
 env = gym.make("res-env-v0", reader_it=reader_it, allowed_types=allowed_types,
                allowed_stocks=allowed_stocks)
 
@@ -78,6 +80,4 @@ agent = agent_base_pfrl.AgentBase(env=env,
                                   writer=writer)
 
 agent.fit()
-
-
 

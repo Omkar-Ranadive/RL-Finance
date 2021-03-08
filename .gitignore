@@ -37,3 +37,6 @@ src/experiments/runs/
 # Ignore archived files 
 src/Archived/
 
+# Ignore scratch file 
+src/scratch.py
+

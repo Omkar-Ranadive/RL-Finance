@@ -1,5 +1,5 @@
-# from iex_parser import Parser, DEEP_1_0, TOPS_1_6
-# from constants import HIST_PATH
+from iex_parser import Parser, DEEP_1_0, TOPS_1_6
+from constants import HIST_PATH
 #
 # path_deep = r'W:\Finance_HIST\Feeds\data_feeds_20201124_20201124_IEXTP1_DEEP1.0.pcap.gz'
 # path_tops = HIST_PATH / 'data_feeds_20201124_20201124_IEXTP1_TOPS1.6.pcap.gz'
@@ -8,7 +8,7 @@
 # counter = 0
 #
 #
-#
+
 # import numpy as np
 # #
 # with Parser(str(path_deep), DEEP_1_0) as reader:
@@ -30,30 +30,38 @@
 #                     continue
 #
 #             counter += 1
-#             if counter % 1000 == 0:
+#             if counter % 10000 == 0:
 #                 print("Processed {} messages".format(counter))
 #
-# # for file in files:
-# #     reader = Parser(file, f_parser).__enter__()
-# #     cur_msg = iter(reader)
-# #     counter = 0
-# #     while counter < 10:
-# #         cur_msg = next(reader)
-# #         if cur_msg['type'] in allowed_types:
-# #             print(cur_msg)
-# #             counter += 1
+from constants import DATA_PATH
+from utils import load_file
 import numpy as np
-import sklearn.preprocessing as preprocessing
+import timeit
+allowed_types = ['price_level_update']
+allowed_stocks_file = DATA_PATH / 'DEEP_2021_03_01-12_17_52_AM_T_100000_N_50'
+allowed_stocks = load_file(filename=allowed_stocks_file)
+file = str(HIST_PATH / 'data_feeds_20201124_20201124_IEXTP1_DEEP1.0.pcap.gz')
 
 
-a = np.array([[1, -1, 0], [-1, 2.4, 5.5]])
-print(a.shape)
-b = np.array([[1, 2, 3],
-             [4, 5 , 6],
-              [7, 8, 9]
-              ])
+# process_hist_data(file=file, allowed_types=allowed, hist_type="DEEP", max_count=300000)
+parser = Parser(file, DEEP_1_0)
+reader = parser.__enter__()
+reader_it = iter(reader)
+counter = 0
+message = next(reader_it)
 
-max_val, min_val = np.max(a), np.min(a)
 
-a = [1, 2, 3, 4, 5]
-print(np.mean(a))
+while True:
+    while message['type'] not in allowed_types or message['symbol'].decode('utf-8') not \
+            in allowed_stocks:
+        message = next(reader_it)
+
+    # Convert symbols and sides from byte-literals to strings
+    message['symbol'] = message['symbol'].decode('utf-8')
+    message['side'] = message['side'].decode('utf-8')
+    # Round off price to 2 decimal places
+    message['price'] = np.round(float(message['price']), 2)
+    counter += 1
+
+    if counter % 100000:
+        print("Counter: {}".format(counter))
