@@ -20,7 +20,7 @@ pip install -r requirements.txt
 
 ## Dataset 
 
-This project uses DEEP (Depth of the Book) IEX Trading Data available here: https://iextrading.com/trading/market-data/
+This project uses DEEP (Depth of the Book) IEX Trading Data available [here.](https://iextrading.com/trading/market-data/)
 
 ## System Overview 
 
