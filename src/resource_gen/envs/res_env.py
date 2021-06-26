@@ -5,7 +5,6 @@ import numpy as np
 from constants import META_PATH, DATA_PATH, HIST_PATH
 from datetime import datetime
 import pandas as pd
-from heapq import heapify, heappush, heappop
 from collections import defaultdict
 import bisect
 from iex_parser import Parser, DEEP_1_0, TOPS_1_6

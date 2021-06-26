@@ -37,6 +37,8 @@ class LobNet(nn.Module):
         return pfrl.action_value.DiscreteActionValue(x)
 
     def forward_2(self, state):
+        # This function returns the stock matrix, while the forward func returns the q-values (
+        # actions)
         with torch.no_grad():
             order_book, f_arr, portfolio = torch.from_numpy(state[0]).unsqueeze(0), \
                                            torch.from_numpy(state[1]).unsqueeze(0), \
@@ -72,13 +74,15 @@ class LobNet2(nn.Module):
 
         concated_flen = 1024+num_stocks*3+num_stocks*5
 
-        self.seq2 = nn.Sequential(
+        self.seq2 = nn.Sequential(nn.Linear(concated_flen, num_stocks))
+
+        self.seq3 = nn.Sequential(
+            nn.ReLU(),
             pfrl.nn.Branched(
-                nn.Linear(concated_flen, num_stocks),
+                nn.Linear(num_stocks, 3),
                 SoftmaxCategoricalHead()
             ),
-            nn.Linear(concated_flen, 3),
-            pfrl.q_functions.DiscreteActionValueHead(),
+            nn.Linear(num_stocks, 1),
         )
 
     def forward(self, state):
@@ -94,7 +98,20 @@ class LobNet2(nn.Module):
 
         x = self.seq2(x)
 
-        return x
+        return self.seq3(x)
+
+    def forward_2(self, state):
+        with torch.no_grad():
+            order_book, f_arr, portfolio = state[0], state[1], state[2]
+            order_book = order_book.view(-1, self.flatten_features(order_book))
+            f_arr = f_arr.view(-1, self.flatten_features(f_arr))
+            portfolio = portfolio.view(-1, self.flatten_features(portfolio))
+
+            x = self.seq1(order_book)
+            x = torch.cat((x, f_arr), dim=1)
+            x = torch.cat((x, portfolio), dim=1)
+
+            return self.seq2(x)
 
     @staticmethod
     def flatten_features(x):
